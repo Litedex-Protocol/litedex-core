@@ -138,7 +138,7 @@ contract Role is Ownable {
      * @dev Throws if called by any account other than the minter.
      */
     modifier onlyMinter() {
-        require(bool,string)(isMinter(msg.sender),"Litedex: caller is not the minter");
+        require(isMinter(msg.sender),"Litedex: caller is not the minter");
         _;
     }
     
@@ -146,7 +146,7 @@ contract Role is Ownable {
      * @dev Throws if called by any account other than the burner.
      */
     modifier onlyBurner() {
-        require(bool,string)(isBurner(msg.sender),"Litedex: caller is not the burner");
+        require(isBurner(msg.sender),"Litedex: caller is not the burner");
         _;
     }
     
@@ -154,7 +154,7 @@ contract Role is Ownable {
      * @dev Throws if called by backlist address
      */
     modifier isWhitelist(){
-        require(bool,string)(isWhitelistAddress(msg.sender),"Litedex: Caller is blacklisted");
+        require(isWhitelistAddress(msg.sender),"Litedex: Caller is blacklisted");
         _;
     }
     
@@ -171,7 +171,7 @@ contract Role is Ownable {
      */
     function addBlacklistAddress(address account) external onlyOwner returns(bool){
         require(account != address(0) , "Litedex: Address is zero address");
-        require(bool,string)(isWhitelistAddress(account),"Litedex: Address was blacklisted");
+        require(isWhitelistAddress(account),"Litedex: Address was blacklisted");
         _blacklist[account].blacklistAddress = account;
         _blacklist[account].blacklistAt = block.timestamp;
         return true;
@@ -182,7 +182,7 @@ contract Role is Ownable {
      */
     function removeBlacklistAddress(address account) external onlyOwner returns(bool){
         require(account != address(0) , "Litedex: Address is zero address");
-        require(bool,string)(!isWhitelistAddress(account),"Litedex: Address was unblacklisted");
+        require(!isWhitelistAddress(account),"Litedex: Address was unblacklisted");
         delete _blacklist[account];
         return true;
     }
@@ -642,7 +642,7 @@ pragma solidity ^0.6.0;
  * functions have been added to mitigate the well-known issues around setting
  * allowances. See {IBEP20-approve}.
  */
-contract BEP20 is IBEP20, Role {
+abstract contract BEP20 is IBEP20, Role {
     using SafeMath for uint256;
     using Address for address;
 
@@ -725,9 +725,8 @@ contract BEP20 is IBEP20, Role {
      * - `recipient` cannot be the zero address.
      * - the caller must have a balance of at least `amount`.
      */
-    function transfer(address recipient, uint256 amount) external virtual isWhitelist override returns (bool) {
+    function _transfer(address recipient, uint256 amount) internal isWhitelist returns (bool) {
         _transfer(_msgSender(), recipient, amount);
-        _moveDelegates(_delegates[_msgSender()], _delegates[recipient], _amount);
         return true;
     }
 
@@ -762,10 +761,9 @@ contract BEP20 is IBEP20, Role {
      * - the caller must have allowance for ``sender``'s tokens of at least
      * `amount`.
      */
-    function transferFrom(address sender, address recipient, uint256 amount) external virtual isWhitelist override returns (bool) {
+    function _transferFrom(address sender, address recipient, uint256 amount) internal isWhitelist returns (bool) {
         _transfer(sender, recipient, amount);
         _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance"));
-        _moveDelegates(_delegates[sender], _delegates[recipient], amount);
         return true;
     }
 
@@ -915,7 +913,38 @@ contract Litedex is BEP20("Litedex", "LDX") {
         _moveDelegates(_delegates[_msgSender()], address(0), _amount);
         _totalBurn += _amount;
 
-        emit Transfer(_msgSender(), address(0), amount);
+        emit Transfer(_msgSender(), address(0), _amount);
+    }
+     /**
+     * @dev See {IBEP20-transfer}.
+     *
+     * Requirements:
+     *
+     * - `recipient` cannot be the zero address.
+     * - the caller must have a balance of at least `amount`.
+     */
+    function transfer(address recipient, uint256 amount) external virtual isWhitelist override returns (bool) {
+        _transfer(recipient, amount);
+        _moveDelegates(_delegates[_msgSender()], _delegates[recipient], amount);
+        return true;
+    }
+    
+    /**
+     * @dev See {IBEP20-transferFrom}.
+     *
+     * Emits an {Approval} event indicating the updated allowance. This is not
+     * required by the EIP. See the note at the beginning of {BEP20};
+     *
+     * Requirements:
+     * - `sender` and `recipient` cannot be the zero address.
+     * - `sender` must have a balance of at least `amount`.
+     * - the caller must have allowance for ``sender``'s tokens of at least
+     * `amount`.
+     */
+    function transferFrom(address sender, address recipient, uint256 amount) external virtual isWhitelist override returns (bool) {
+       _transferFrom(sender, recipient, amount);
+       _moveDelegates(_delegates[sender], _delegates[recipient], amount);
+        return true;
     }
     
     function getTotalBurn() external view returns(uint256){
