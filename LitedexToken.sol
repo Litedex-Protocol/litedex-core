@@ -725,7 +725,7 @@ abstract contract BEP20 is IBEP20, Role {
      * - `recipient` cannot be the zero address.
      * - the caller must have a balance of at least `amount`.
      */
-    function _transfer(address recipient, uint256 amount) internal isWhitelist returns (bool) {
+    function transfer(address recipient, uint256 amount) public virtual override isWhitelist returns (bool) {
         _transfer(_msgSender(), recipient, amount);
         return true;
     }
@@ -761,7 +761,7 @@ abstract contract BEP20 is IBEP20, Role {
      * - the caller must have allowance for ``sender``'s tokens of at least
      * `amount`.
      */
-    function _transferFrom(address sender, address recipient, uint256 amount) internal isWhitelist returns (bool) {
+    function transferFrom(address sender, address recipient, uint256 amount) public virtual override isWhitelist returns (bool) {
         _transfer(sender, recipient, amount);
         _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "BEP20: transfer amount exceeds allowance"));
         return true;
@@ -898,7 +898,7 @@ abstract contract BEP20 is IBEP20, Role {
 
 pragma solidity ^0.6.12;
 
-contract Litedex is BEP20("Litedex", "LDX") {
+contract Litedex is BEP20("Hoamx", "Hoamx") {
     
     uint256 private _totalBurn;
     
@@ -923,8 +923,8 @@ contract Litedex is BEP20("Litedex", "LDX") {
      * - `recipient` cannot be the zero address.
      * - the caller must have a balance of at least `amount`.
      */
-    function transfer(address recipient, uint256 amount) external virtual isWhitelist override returns (bool) {
-        _transfer(recipient, amount);
+    function transfer(address recipient, uint256 amount) public virtual override returns (bool) {
+        super.transfer(recipient, amount);
         _moveDelegates(_delegates[_msgSender()], _delegates[recipient], amount);
         return true;
     }
@@ -941,8 +941,8 @@ contract Litedex is BEP20("Litedex", "LDX") {
      * - the caller must have allowance for ``sender``'s tokens of at least
      * `amount`.
      */
-    function transferFrom(address sender, address recipient, uint256 amount) external virtual isWhitelist override returns (bool) {
-       _transferFrom(sender, recipient, amount);
+    function transferFrom(address sender, address recipient, uint256 amount) public virtual override returns (bool) {
+       super.transferFrom(sender, recipient, amount);
        _moveDelegates(_delegates[sender], _delegates[recipient], amount);
         return true;
     }
