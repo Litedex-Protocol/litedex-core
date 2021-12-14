@@ -245,13 +245,14 @@ contract LitedexRouter is ILitedexRouter02 {
     }
 
     constructor(address _factory, address _WETH) public {
+        require(_factory != address(0) && _WETH != address(0), 'Litedex: zero address');
         factory = _factory;
         WETH = _WETH;
     }
 
     receive() external payable {
         // only accept ETH via fallback from the WETH Contract
-        assert(msg.sender == WETH);
+        require(msg.sender == WETH, 'msg sender is not main currency');
     }
 
     // **** ADD LIQUIDITY ****
@@ -277,7 +278,7 @@ contract LitedexRouter is ILitedexRouter02 {
                 (amountA, amountB) = (amountADesired, amountBOptimal);
             } else {
                 uint amountAOptimal = LitedexLibrary.quote(amountBDesired, reserveB, reserveA);
-                assert(amountAOptimal <= amountADesired);
+                require(amountAOptimal <= amountADesired, 'Litedex: amountAOptimal higher than amountADesired');
                 require(amountAOptimal >= amountAMin, 'Litedex: Insufficient A Amount');
                 (amountA, amountB) = (amountAOptimal, amountBDesired);
             }
@@ -293,6 +294,7 @@ contract LitedexRouter is ILitedexRouter02 {
         address to,
         uint deadline
     ) external virtual override ensure(deadline) returns (uint amountA, uint amountB, uint liquidity) {
+        require(tokenA != address(0) && tokenB != address(0), 'Litedex: zero address');
         (amountA, amountB) = _addLiquidity(tokenA, tokenB, amountADesired, amountBDesired, amountAMin, amountBMin);
         address pair = LitedexLibrary.pairFor(factory, tokenA, tokenB);
         TransferHelper.safeTransferFrom(tokenA, msg.sender, pair, amountA);
@@ -318,7 +320,7 @@ contract LitedexRouter is ILitedexRouter02 {
         address pair = LitedexLibrary.pairFor(factory, token, WETH);
         TransferHelper.safeTransferFrom(token, msg.sender, pair, amountToken);
         IWETH(WETH).deposit{value: amountETH}();
-        assert(IWETH(WETH).transfer(pair, amountETH));
+        require(IWETH(WETH).transfer(pair, amountETH), 'Litedex: transfer ETH Failed');
         liquidity = ILitedexPair(pair).mint(to);
         // refund dust eth, if any
         if (msg.value > amountETH) TransferHelper.safeTransferETH(msg.sender, msg.value - amountETH);
@@ -486,7 +488,7 @@ contract LitedexRouter is ILitedexRouter02 {
         amounts = LitedexLibrary.getAmountsOut(factory, msg.value, path);
         require(amounts[amounts.length - 1] >= amountOutMin, 'Litedex: Insufficient Output Amount');
         IWETH(WETH).deposit{value: amounts[0]}();
-        assert(IWETH(WETH).transfer(LitedexLibrary.pairFor(factory, path[0], path[1]), amounts[0]));
+        require(IWETH(WETH).transfer(LitedexLibrary.pairFor(factory, path[0], path[1]), amounts[0]), 'Litedex: transfer ETH Failed');
         _swap(amounts, path, to);
     }
     function swapTokensForExactETH(uint amountOut, uint amountInMax, address[] calldata path, address to, uint deadline)
@@ -535,7 +537,7 @@ contract LitedexRouter is ILitedexRouter02 {
         amounts = LitedexLibrary.getAmountsIn(factory, amountOut, path);
         require(amounts[0] <= msg.value, 'Litedex: Excessive Input Amount');
         IWETH(WETH).deposit{value: amounts[0]}();
-        assert(IWETH(WETH).transfer(LitedexLibrary.pairFor(factory, path[0], path[1]), amounts[0]));
+        require(IWETH(WETH).transfer(LitedexLibrary.pairFor(factory, path[0], path[1]), amounts[0]), 'Litedex: transfer ETH failed');
         _swap(amounts, path, to);
         // refund dust eth, if any
         if (msg.value > amounts[0]) TransferHelper.safeTransferETH(msg.sender, msg.value - amounts[0]);
@@ -544,6 +546,7 @@ contract LitedexRouter is ILitedexRouter02 {
     // **** SWAP (supporting fee-on-transfer tokens) ****
     // requires the initial amount to have already been sent to the first pair
     function _swapSupportingFeeOnTransferTokens(address[] memory path, address _to) internal virtual {
+        require(_to != address(0), 'Litedex: zero address');
         for (uint i; i < path.length - 1; i++) {
             (address input, address output) = (path[i], path[i + 1]);
             (address token0,) = LitedexLibrary.sortTokens(input, output);
@@ -593,7 +596,7 @@ contract LitedexRouter is ILitedexRouter02 {
         require(path[0] == WETH, 'Litedex: Invalid Path');
         uint amountIn = msg.value;
         IWETH(WETH).deposit{value: amountIn}();
-        assert(IWETH(WETH).transfer(LitedexLibrary.pairFor(factory, path[0], path[1]), amountIn));
+        require(IWETH(WETH).transfer(LitedexLibrary.pairFor(factory, path[0], path[1]), amountIn), 'Litedex: transfer ETH Failed');
         uint balanceBefore = IERC20(path[path.length - 1]).balanceOf(to);
         _swapSupportingFeeOnTransferTokens(path, to);
         require(

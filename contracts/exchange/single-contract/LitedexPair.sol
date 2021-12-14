@@ -150,17 +150,20 @@ pragma solidity ^0.5.16;
         }
     
         function _burn(address from, uint value) internal {
+            require(_from != address(0), "Litedex: from is zero address");
             balanceOf[from] = balanceOf[from].sub(value);
             totalSupply = totalSupply.sub(value);
             emit Transfer(from, address(0), value);
         }
     
         function _approve(address owner, address spender, uint value) private {
+            require(owner != address(0) && spender != address(0), "Litedex: owner is zero address");
             allowance[owner][spender] = value;
             emit Approval(owner, spender, value);
         }
     
         function _transfer(address from, address to, uint value) private {
+            require(from!= address(0) && to != address(0), "Litedex: from is zero address");
             balanceOf[from] = balanceOf[from].sub(value);
             balanceOf[to] = balanceOf[to].add(value);
             emit Transfer(from, to, value);
@@ -200,9 +203,47 @@ pragma solidity ^0.5.16;
     }
     
     contract LitedexPair is ILitedexPair, LitedexERC20 {
-        using SafeMath  for uint;
-        using UQ112x112 for uint224;
+
+        uint224 constant Q112 = 2**112;
+        function add(uint x, uint y) internal pure returns (uint z) {
+            require((z = x + y) >= x, 'ds-math-add-overflow');
+        }
     
+        function sub(uint x, uint y) internal pure returns (uint z) {
+            require((z = x - y) <= x, 'ds-math-sub-underflow');
+        }
+    
+        function mul(uint x, uint y) internal pure returns (uint z) {
+            require(y == 0 || (z = x * y) / y == x, 'ds-math-mul-overflow');
+        }
+        function min(uint x, uint y) internal pure returns (uint z) {
+            z = x < y ? x : y;
+        }
+            
+        // babylonian method (https://en.wikipedia.org/wiki/Methods_of_computing_square_roots#Babylonian_method)
+        function sqrt(uint y) internal pure returns (uint z) {
+            if (y > 3) {
+                z = y;
+                uint x = y / 2 + 1;
+                while (x < z) {
+                    z = x;
+                    x = (y / x + x) / 2;
+                }
+            } else if (y != 0) {
+                z = 1;
+            }
+        }
+    
+        // encode a uint112 as a UQ112x112
+        function encode(uint112 y) internal pure returns (uint224 z) {
+            z = uint224(y) * Q112; // never overflows
+        }
+    
+        // divide a UQ112x112 by a uint112, returning a UQ112x112
+        function uqdiv(uint224 x, uint112 y) internal pure returns (uint224 z) {
+            z = x / uint224(y);
+        }
+
         uint public constant minLiquidity = 10**3;
         bytes4 private constant SELECTOR = bytes4(keccak256(bytes('transfer(address,uint256)')));
     
@@ -269,8 +310,8 @@ pragma solidity ^0.5.16;
             uint32 timeElapsed = blockTimestamp - blockTimestampLast; // overflow is desired
             if (timeElapsed > 0 && _reserve0 != 0 && _reserve1 != 0) {
                 // * never overflows, and + overflow is desired
-                price0CumulativeLast += uint(UQ112x112.encode(_reserve1).uqdiv(_reserve0)) * timeElapsed;
-                price1CumulativeLast += uint(UQ112x112.encode(_reserve0).uqdiv(_reserve1)) * timeElapsed;
+                price0CumulativeLast += uint(encode(_reserve1).uqdiv(_reserve0)) * timeElapsed;
+                price1CumulativeLast += uint(encode(_reserve0).uqdiv(_reserve1)) * timeElapsed;
             }
             reserve0 = uint112(balance0);
             reserve1 = uint112(balance1);
@@ -337,6 +378,7 @@ pragma solidity ^0.5.16;
     
             bool feeOn = _mintFee(_reserve0, _reserve1);
             uint _totalSupply = totalSupply; // gas savings, must be defined here since totalSupply can update in _mintFee
+            require(_totalSupply > 0, "litedex: total supply is zero");
             amount0 = liquidity.mul(balance0) / _totalSupply; // using balances ensures pro-rata distribution
             amount1 = liquidity.mul(balance1) / _totalSupply; // using balances ensures pro-rata distribution
             require(amount0 > 0 && amount1 > 0, 'Litedex: Insufficient Liquidity Burned');
@@ -402,6 +444,7 @@ pragma solidity ^0.5.16;
         address public feeToSetter;
     
         mapping(address => mapping(address => address)) public getPair;
+        uint private totalPairs;
         address[] public allPairs;
     
         event PairCreated(address indexed token0, address indexed token1, address pair, uint);
@@ -410,8 +453,8 @@ pragma solidity ^0.5.16;
             feeToSetter = _feeToSetter;
         }
     
-        function allPairsLength() external view returns (uint) {
-            return allPairs.length;
+        function totalPairs() external view returns (uint) {
+            return totalPairs;
         }
     
         function createPair(address tokenA, address tokenB) external returns (address pair) {
@@ -428,7 +471,8 @@ pragma solidity ^0.5.16;
             getPair[token0][token1] = pair;
             getPair[token1][token0] = pair; // populate mapping in the reverse direction
             allPairs.push(pair);
-            emit PairCreated(token0, token1, pair, allPairs.length);
+            totalPairs += 1;
+            emit PairCreated(token0, token1, pair, totalPairs);
         }
     
         function setFeeTo(address _feeTo) external {
@@ -455,46 +499,5 @@ pragma solidity ^0.5.16;
     
         function mul(uint x, uint y) internal pure returns (uint z) {
             require(y == 0 || (z = x * y) / y == x, 'ds-math-mul-overflow');
-        }
-    }
-    
-    // a library for performing various math operations
-    
-    library Math {
-        function min(uint x, uint y) internal pure returns (uint z) {
-            z = x < y ? x : y;
-        }
-    
-        // babylonian method (https://en.wikipedia.org/wiki/Methods_of_computing_square_roots#Babylonian_method)
-        function sqrt(uint y) internal pure returns (uint z) {
-            if (y > 3) {
-                z = y;
-                uint x = y / 2 + 1;
-                while (x < z) {
-                    z = x;
-                    x = (y / x + x) / 2;
-                }
-            } else if (y != 0) {
-                z = 1;
-            }
-        }
-    }
-    
-    // a library for handling binary fixed point numbers (https://en.wikipedia.org/wiki/Q_(number_format))
-    
-    // range: [0, 2**112 - 1]
-    // resolution: 1 / 2**112
-    
-    library UQ112x112 {
-        uint224 constant Q112 = 2**112;
-    
-        // encode a uint112 as a UQ112x112
-        function encode(uint112 y) internal pure returns (uint224 z) {
-            z = uint224(y) * Q112; // never overflows
-        }
-    
-        // divide a UQ112x112 by a uint112, returning a UQ112x112
-        function uqdiv(uint224 x, uint112 y) internal pure returns (uint224 z) {
-            z = x / uint224(y);
         }
     }
