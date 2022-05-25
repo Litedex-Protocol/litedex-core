@@ -1088,7 +1088,7 @@ contract LitedexSP is BEP20('Litedex Stake Pool', 'LDX-SP') {
 
     function burn(address _from ,uint256 _amount) public onlyOwner {
         _burn(_from, _amount);
-        _moveDelegates(address(0), _delegates[_from], _amount);
+        _moveDelegates(_delegates[_from], address(0), _amount);
     }
 
     // The Litedex TOKEN!

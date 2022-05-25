@@ -453,9 +453,9 @@ pragma solidity ^0.5.16;
             feeToSetter = _feeToSetter;
         }
     
-        function totalPairs() external view returns (uint) {
+        function getTotalPairs() external view returns (uint) {
             return totalPairs;
-        }
+        }   
     
         function createPair(address tokenA, address tokenB) external returns (address pair) {
             require(tokenA != tokenB, 'Litedex: Identical Addresses');
