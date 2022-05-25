@@ -23,6 +23,69 @@ abstract contract Context {
     }
 }
 
+// File: @openzeppelin/contracts/utils/ReentrancyGuard.sol
+
+pragma solidity >=0.6.0 <0.8.0;
+
+/**
+ * @dev Contract module that helps prevent reentrant calls to a function.
+ *
+ * Inheriting from `ReentrancyGuard` will make the {nonReentrant} modifier
+ * available, which can be applied to functions to make sure there are no nested
+ * (reentrant) calls to them.
+ *
+ * Note that because there is a single `nonReentrant` guard, functions marked as
+ * `nonReentrant` may not call one another. This can be worked around by making
+ * those functions `private`, and then adding `external` `nonReentrant` entry
+ * points to them.
+ *
+ * TIP: If you would like to learn more about reentrancy and alternative ways
+ * to protect against it, check out our blog post
+ * https://blog.openzeppelin.com/reentrancy-after-istanbul/[Reentrancy After Istanbul].
+ */
+abstract contract ReentrancyGuard {
+    // Booleans are more expensive than uint256 or any type that takes up a full
+    // word because each write operation emits an extra SLOAD to first read the
+    // slot's contents, replace the bits taken up by the boolean, and then write
+    // back. This is the compiler's defense against contract upgrades and
+    // pointer aliasing, and it cannot be disabled.
+
+    // The values being non-zero value makes deployment a bit more expensive,
+    // but in exchange the refund on every call to nonReentrant will be lower in
+    // amount. Since refunds are capped to a percentage of the total
+    // transaction's gas, it is best to keep them low in cases like this one, to
+    // increase the likelihood of the full refund coming into effect.
+    uint256 private constant _NOT_ENTERED = 1;
+    uint256 private constant _ENTERED = 2;
+
+    uint256 private _status;
+
+    constructor() internal {
+        _status = _NOT_ENTERED;
+    }
+
+    /**
+     * @dev Prevents a contract from calling itself, directly or indirectly.
+     * Calling a `nonReentrant` function from another `nonReentrant`
+     * function is not supported. It is possible to prevent this from happening
+     * by making the `nonReentrant` function external, and make it call a
+     * `private` function that does the actual work.
+     */
+    modifier nonReentrant() {
+        // On the first call to nonReentrant, _notEntered will be true
+        require(_status != _ENTERED, "ReentrancyGuard: reentrant call");
+
+        // Any calls to nonReentrant after this point will fail
+        _status = _ENTERED;
+
+        _;
+
+        // By storing the original value once again, a refund is triggered (see
+        // https://eips.ethereum.org/EIPS/eip-2200)
+        _status = _NOT_ENTERED;
+    }
+}
+
 /**
  * @dev Contract module which provides a basic access control mechanism, where
  * there is an account (an owner) that can be granted exclusive access to
@@ -800,7 +863,7 @@ interface ILitedexFarmer {
     function emergencyWithdraw(uint256 _pid) external;
 }
 
-contract LitedexVault is Ownable, Pausable {
+contract LitedexVault is Ownable, Pausable, ReentrancyGuard {
     using SafeBEP20 for IBEP20;
     using SafeMath for uint256;
 
@@ -833,6 +896,15 @@ contract LitedexVault is Ownable, Pausable {
     uint256 public withdrawFee = 10; // 0.1%
     uint256 public withdrawFeePeriod = 72 hours; // 3 days
 
+    event SetAdmin(address indexed lastAdmin, address indexed newAdmin, uint currentTime);
+    event SetTreasury(address indexed lastTreasury, address indexed newTreasury, uint currentTime);
+    event SetPerformanceFee(uint256 lastPerformanceFee, uint256 newPerformanceFee, uint currentTime);
+    event SetCallFee(uint256 lastCallFee, uint256 newCallFee, uint currentTime);
+    event SetWithdrawFee(uint256 lastWithdrawFee, uint256 newWithdrawFee, uint currentTime);
+    event SetWithdrawFeePeriod(uint256 lastWithdrawFeePeriod, uint256 newWithdrawFeePeriod, uint currentTime);
+    event EmergencyWithdraw(uint currentTime);
+    event HandleStuckTokens(uint256 amount, uint currentTime);
+
     event Deposit(address indexed sender, uint256 amount, uint256 shares, uint256 lastDepositedTime);
     event Withdraw(address indexed sender, uint256 amount, uint256 shares);
     event Harvest(address indexed sender, uint256 performanceFee, uint256 callFee);
@@ -854,6 +926,11 @@ contract LitedexVault is Ownable, Pausable {
         address _admin,
         address _treasury
     ) public {
+        require(address(_token) != address(0),"_token should not be address(0)");
+	    require(address(_receiptToken) != address(0),"_receiptToken should not be address(0)");
+	    require(address(_farmer) != address(0),"_farmer should not be address(0)");
+	    require(_admin != address(0),"_admin should not be address(0)");
+	    require(_treasury != address(0),"_treasury should not be address(0)");
         token = _token;
         receiptToken = _receiptToken;
         farmer = _farmer;
@@ -886,7 +963,7 @@ contract LitedexVault is Ownable, Pausable {
      * @dev Only possible when contract not paused.
      * @param _amount: number of tokens to deposit (in LDX)
      */
-    function deposit(uint256 _amount) external whenNotPaused notContract {
+    function deposit(uint256 _amount) external whenNotPaused notContract nonReentrant {
         require(_amount > 0, "Nothing to deposit");
 
         uint256 pool = balanceOf();
@@ -923,7 +1000,7 @@ contract LitedexVault is Ownable, Pausable {
      * @notice Reinvests LDX tokens into LitedexFarmer
      * @dev Only possible when contract not paused.
      */
-    function harvest() external notContract whenNotPaused {
+    function harvest() external notContract whenNotPaused nonReentrant {
         ILitedexFarmer(farmer).leaveStaking(0);
 
         uint256 bal = available();
@@ -946,7 +1023,10 @@ contract LitedexVault is Ownable, Pausable {
      */
     function setAdmin(address _admin) external onlyOwner {
         require(_admin != address(0), "Cannot be zero address");
+
+        emit SetAdmin(admin, _admin, block.timestamp);
         admin = _admin;
+
     }
 
     /**
@@ -955,6 +1035,7 @@ contract LitedexVault is Ownable, Pausable {
      */
     function setTreasury(address _treasury) external onlyOwner {
         require(_treasury != address(0), "Cannot be zero address");
+        emit SetTreasury(treasury, _treasury, block.timestamp);
         treasury = _treasury;
     }
 
@@ -964,6 +1045,7 @@ contract LitedexVault is Ownable, Pausable {
      */
     function setPerformanceFee(uint256 _performanceFee) external onlyAdmin {
         require(_performanceFee <= MAX_PERFORMANCE_FEE, "performanceFee cannot be more than MAX_PERFORMANCE_FEE");
+        emit SetPerformanceFee(performanceFee, _performanceFee, block.timestamp);
         performanceFee = _performanceFee;
     }
 
@@ -973,6 +1055,7 @@ contract LitedexVault is Ownable, Pausable {
      */
     function setCallFee(uint256 _callFee) external onlyAdmin {
         require(_callFee <= MAX_CALL_FEE, "callFee cannot be more than MAX_CALL_FEE");
+        emit SetCallFee(callFee, _callFee, block.timestamp);
         callFee = _callFee;
     }
 
@@ -982,6 +1065,7 @@ contract LitedexVault is Ownable, Pausable {
      */
     function setWithdrawFee(uint256 _withdrawFee) external onlyAdmin {
         require(_withdrawFee <= MAX_WITHDRAW_FEE, "withdrawFee cannot be more than MAX_WITHDRAW_FEE");
+        emit SetWithdrawFee(withdrawFee, _withdrawFee, block.timestamp);
         withdrawFee = _withdrawFee;
     }
 
@@ -994,6 +1078,7 @@ contract LitedexVault is Ownable, Pausable {
             _withdrawFeePeriod <= MAX_WITHDRAW_FEE_PERIOD,
             "withdrawFeePeriod cannot be more than MAX_WITHDRAW_FEE_PERIOD"
         );
+        emit SetWithdrawFeePeriod(withdrawFeePeriod, _withdrawFeePeriod, block.timestamp);
         withdrawFeePeriod = _withdrawFeePeriod;
     }
 
@@ -1002,6 +1087,7 @@ contract LitedexVault is Ownable, Pausable {
      * @dev EMERGENCY ONLY. Only callable by the contract admin.
      */
     function emergencyWithdraw() external onlyAdmin {
+        emit EmergencyWithdraw(block.timestamp);
         ILitedexFarmer(farmer).emergencyWithdraw(0);
     }
 
@@ -1011,8 +1097,9 @@ contract LitedexVault is Ownable, Pausable {
     function inCaseTokensGetStuck(address _token) external onlyAdmin {
         require(_token != address(token), "Token cannot be same as deposit token");
         require(_token != address(receiptToken), "Token cannot be same as receipt token");
-
+        
         uint256 amount = IBEP20(_token).balanceOf(address(this));
+        emit HandleStuckTokens(amount, block.timestamp);
         IBEP20(_token).safeTransfer(msg.sender, amount);
     }
 
@@ -1068,7 +1155,7 @@ contract LitedexVault is Ownable, Pausable {
      * @notice Withdraws from funds from the Litedex Vault
      * @param _shares: Number of shares to withdraw
      */
-    function withdraw(uint256 _shares) public notContract {
+    function withdraw(uint256 _shares) public notContract nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
         require(_shares > 0, "Nothing to withdraw");
         require(_shares <= user.shares, "Withdraw amount exceeds balance");

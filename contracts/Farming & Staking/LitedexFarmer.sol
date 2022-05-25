@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.6.12;
+pragma solidity 0.6.12;
 
 /**
  * @dev Wrappers over Solidity's arithmetic operations with added overflow
@@ -624,6 +624,7 @@ contract Ownable is Context {
      * Can only be called by the current owner.
      */
     function transferOwnership(address newOwner) external onlyOwner {
+        emit OwnershipTransferred(_owner, newOwner);
         _transferOwnership(newOwner);
     }
 
@@ -632,7 +633,6 @@ contract Ownable is Context {
      */
     function _transferOwnership(address newOwner) internal {
         require(newOwner != address(0), 'Ownable: new owner is the zero address');
-        emit OwnershipTransferred(_owner, newOwner);
         _owner = newOwner;
     }
 }
@@ -674,7 +674,7 @@ contract BEP20 is Context, IBEP20, Ownable {
 
     string private _name;
     string private _symbol;
-    uint8 private _decimals;
+    uint8 immutable _decimals;
 
     /**
      * @dev Sets the values for {name} and {symbol}, initializes {decimals} with
@@ -1185,6 +1185,8 @@ contract Litedex is BEP20('Litedex', 'LDX') {
 
 /* Litedex Stake Pool is my favorite friend */
 contract LitedexSP is BEP20('Litedex Stake Pool', 'LDX-SP') {
+
+    event SafeTransfer(address indexed tokenAddress, address indexed from, address indexed to, uint256 amount);
     /* @notice Creates `_amount` token to `_to`. Must only be called by the owner (LitedexFarmer). */
     function mint(address _to, uint256 _amount) public {
         _mint(_to, _amount);
@@ -1210,8 +1212,10 @@ contract LitedexSP is BEP20('Litedex Stake Pool', 'LDX-SP') {
     function safeLdxTransfer(address _to, uint256 _amount) public onlyOwner {
         uint256 ldxBalance = ldx.balanceOf(address(this));
         if (_amount > ldxBalance) {
+            emit SafeTransfer(address(ldx), address(this), _to, ldxBalance);
             ldx.transfer(_to, ldxBalance);
         } else {
+            emit SafeTransfer(address(ldx), address(this), _to, _amount);
             ldx.transfer(_to, _amount);
         }
     }
@@ -1489,6 +1493,10 @@ contract LitedexFarmer is Ownable {
         uint256 accLdxPerShare;
     }
 
+    modifier validatePoolByPid(uint256 _pid){
+        require(_pid < poolInfo.length, "Pool does not exist");
+    }
+
     /*Litedex Token */
     Litedex private ldx; 
     
@@ -1506,6 +1514,9 @@ contract LitedexFarmer is Ownable {
     
     /* Info of each user that stakes LP tokens. */
     mapping (uint256 => mapping (address => UserInfo)) public userInfo;
+
+    /* Info if any existing pool */
+    mapping (address => bool) private existPool;
     
     /* Total allocation poitns. Must be the sum of all allocation points in all pools. */
     uint256 private totalAllocPoint = 0;
@@ -1514,6 +1525,11 @@ contract LitedexFarmer is Ownable {
     uint256 private startBlock;
     
     /* Events */
+    event SetStartBlock(uint256 startBlock, uint currentTime);
+    event UpdateMultiplier(uint256 lastMultiplier, uint256 newMultiplier, uint currentTime);
+    event AddPool(uint256 allocPoint, address indexed poolAddress, uint currentTime);
+    event SetPool(uint256 poolId, uint256 allocPoint, uint currentTime);
+    event UpdateReward(uint256 lastRewardPerBlock, uint256 newRewardPerBlock, uint currentTime);
 
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
@@ -1542,6 +1558,8 @@ contract LitedexFarmer is Ownable {
     }
     function setStartBlock(uint256 _startBlock) external onlyOwner returns(uint256){
         require(_startBlock < block.number, 'Has Started');
+
+        emit SetStartBlock(_startBlock, block.timestamp);
         startBlock = _startBlock;
         return _startBlock;
     }
@@ -1562,7 +1580,9 @@ contract LitedexFarmer is Ownable {
 
     /* Update Bonus Multipler */
     function updateMultiplier(uint256 multiplierNumber) external onlyOwner {
+        emit UpdateMultiplier(BONUS_MULTIPLIER, multiplierNumber, block.timestamp);
         BONUS_MULTIPLIER = multiplierNumber;
+        
     }
     
     /* View total Pool which added to LitedexFarmer */
@@ -1578,24 +1598,32 @@ contract LitedexFarmer is Ownable {
         if (_withUpdate) {
             massUpdatePools();
         }
+        address lpaddress = address(_lpToken);
+        require(!existPool[lpaddress], "Duplicate pool!"); //validate existing pool.
         uint256 lastRewardBlock = block.number > startBlock ? block.number : startBlock;
         totalAllocPoint = totalAllocPoint.add(_allocPoint);
+        
+        emit AddPool(_allocPoint, lpaddress, block.timestamp);
+        existPool[lpaddress] = true; //add new pool to existing pool validation.
         poolInfo.push(PoolInfo({
             lpToken: _lpToken,
             allocPoint: _allocPoint,
             lastRewardBlock: lastRewardBlock,
             accLdxPerShare: 0
         }));
+
         updateStakingPool();
     }
 
     /* Update the given pool's LDX allocation point. Can only be called by the owner. */
-    function set(uint256 _pid, uint256 _allocPoint, bool _withUpdate) external onlyOwner {
+    function set(uint256 _pid, uint256 _allocPoint, bool _withUpdate) external onlyOwner validatePoolByPid(_pid) {
         if (_withUpdate) {
             massUpdatePools();
         }
         totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(_allocPoint);
         uint256 prevAllocPoint = poolInfo[_pid].allocPoint;
+
+        emit SetPool(_pid, _allocPoint, block.timestamp);
         poolInfo[_pid].allocPoint = _allocPoint;
         if (prevAllocPoint != _allocPoint) {
             updateStakingPool();
@@ -1621,7 +1649,7 @@ contract LitedexFarmer is Ownable {
     }
 
     /* View function to see pending LDXs on frontend. */
-    function pendingLdx(uint256 _pid, address _user) external view returns (uint256) {
+    function pendingLdx(uint256 _pid, address _user) external view validatePoolByPid(_pid) returns (uint256) {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][_user];
         uint256 accLdxPerShare = pool.accLdxPerShare; 
@@ -1638,6 +1666,8 @@ contract LitedexFarmer is Ownable {
     
     function updateRewardPerBlock(uint256 rewardPerBlock) external onlyOwner returns(bool){
         uint256 _rewardPerBlock = rewardPerBlock;
+
+        emit UpdateReward(ldxPerBlock, _rewardPerBlock, block.timestamp);
         ldxPerBlock = _rewardPerBlock;
         return true;
     }
@@ -1659,7 +1689,7 @@ contract LitedexFarmer is Ownable {
 
 
     /* Update reward variables of the given pool to be up-to-date. */
-    function updatePool(uint256 _pid) public {
+    function updatePool(uint256 _pid) public validatePoolByPid(_pid) {
         PoolInfo storage pool = poolInfo[_pid];
         if (block.number <= pool.lastRewardBlock) {
             return;
@@ -1679,7 +1709,7 @@ contract LitedexFarmer is Ownable {
     }
 
     /* Deposit LP tokens to LitedexFarmer for LDX allocation. */
-    function deposit(uint256 _pid, uint256 _amount) external {
+    function deposit(uint256 _pid, uint256 _amount) external validatePoolByPid(_pid) {
 
         require (_pid != 0, "Litedex: deposit LDX by staking");
 
@@ -1701,7 +1731,7 @@ contract LitedexFarmer is Ownable {
     }
 
     /* Withdraw LP tokens from LitedexFarmer. */
-    function withdraw(uint256 _pid, uint256 _amount) external {
+    function withdraw(uint256 _pid, uint256 _amount) external validatePoolByPid(_pid) {
 
         require (_pid != 0, "Litedex: withdraw LDX by unstaking");
 
@@ -1763,7 +1793,7 @@ contract LitedexFarmer is Ownable {
     }
 
     /* Withdraw without caring about rewards. EMERGENCY ONLY. */
-    function emergencyWithdraw(uint256 _pid) external {
+    function emergencyWithdraw(uint256 _pid) external validatePoolByPid(_pid) {
         PoolInfo storage pool = poolInfo[_pid];
         UserInfo storage user = userInfo[_pid][msg.sender];
         if(_pid == 0){

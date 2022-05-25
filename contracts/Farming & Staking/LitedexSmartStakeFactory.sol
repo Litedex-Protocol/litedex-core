@@ -77,7 +77,7 @@ abstract contract Ownable is Context {
      * NOTE: Renouncing ownership will leave the contract without an owner,
      * thereby removing any functionality that is only available to the owner.
      */
-    function renounceOwnership() public virtual onlyOwner {
+    function renounceOwnership() external virtual onlyOwner {
         emit OwnershipTransferred(_owner, address(0));
         _owner = address(0);
     }
@@ -804,7 +804,7 @@ contract LitedexSmartStake is Ownable, ReentrancyGuard {
     using SafeBEP20 for IBEP20;
 
     // The address of the smart stake factory
-    address public SMART_STAKE_FACTORY;
+    address immutable SMART_STAKE_FACTORY;
 
     // Whether a limit is set for users
     bool public hasUserLimit;
@@ -846,6 +846,16 @@ contract LitedexSmartStake is Ownable, ReentrancyGuard {
         uint256 amount; // How many staked tokens the user has provided
         uint256 rewardDebt; // Reward debt
     }
+    event Initialized(
+        address indexed stakedTokenAddress,
+        address indexed rewardTokenAddress,
+        uint256 rewardPerBlock,
+        uint256 startBlock,
+        uint256 endBlock,
+        uint256 poolLimit,
+        address indexed admin
+    );
+    event StopReward(uint256 endBlock);
 
     event AdminTokenRecovery(address tokenRecovered, uint256 amount);
     event Deposit(address indexed user, uint256 amount);
@@ -885,9 +895,13 @@ contract LitedexSmartStake is Ownable, ReentrancyGuard {
         // Make this contract initialized
         isInitialized = true;
 
+        require(_stakedToken != address(0), "_stakedToken is zero address!");
+        require(_rewardToken != address(0), "_rewardToken is zero address!");
         stakedToken = _stakedToken;
         rewardToken = _rewardToken;
         rewardPerBlock = _rewardPerBlock;
+
+        require(_startBlock < _bonusEndBlock, "startBlock must be lower than endBlock");
         startBlock = _startBlock;
         bonusEndBlock = _bonusEndBlock;
 
@@ -906,6 +920,8 @@ contract LitedexSmartStake is Ownable, ReentrancyGuard {
 
         // Transfer ownership to the admin address who becomes owner of the contract
         transferOwnership(_admin);
+
+        emit Initialized(address(_stakedToken), address(_rewardToken), _rewardPerBlock, _startBlock, _bonusEndBlock, _poolLimitPerUser, _admin);
     }
 
     /*
@@ -986,6 +1002,7 @@ contract LitedexSmartStake is Ownable, ReentrancyGuard {
      * @dev Only callable by owner. Needs to be for emergency.
      */
     function emergencyRewardWithdraw(uint256 _amount) external onlyOwner {
+        emit EmergencyWithdraw(msg.sender, _amount);
         rewardToken.safeTransfer(address(msg.sender), _amount);
     }
 
@@ -1009,6 +1026,7 @@ contract LitedexSmartStake is Ownable, ReentrancyGuard {
      * @dev Only callable by owner
      */
     function stopReward() external onlyOwner {
+        emit StopReward(blockNumber);
         bonusEndBlock = block.number;
     }
 
@@ -1148,8 +1166,8 @@ contract LitedexSmartStakeFactory is Ownable {
         uint256 _poolLimitPerUser,
         address _admin
     ) external onlyOwner {
-        require(_stakedToken.totalSupply() >= 0);
-        require(_rewardToken.totalSupply() >= 0);
+        require(_stakedToken.totalSupply() >= 0, "_stakedToken supply is zero!");
+        require(_rewardToken.totalSupply() >= 0, "_rewardToken supply is zero!");
         require(_stakedToken != _rewardToken, "Tokens must be be different");
 
         bytes memory bytecode = type(LitedexSmartStake).creationCode;

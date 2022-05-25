@@ -74,7 +74,7 @@ contract Ownable is Context {
      * NOTE: Renouncing ownership will leave the contract without an owner,
      * thereby removing any functionality that is only available to the owner.
      */
-    function renounceOwnership() public onlyOwner {
+    function renounceOwnership() external onlyOwner {
         emit OwnershipTransferred(_owner, address(0));
         _owner = address(0);
     }
@@ -83,7 +83,9 @@ contract Ownable is Context {
      * @dev Transfers ownership of the contract to a new account (`newOwner`).
      * Can only be called by the current owner.
      */
-    function transferOwnership(address newOwner) public onlyOwner {
+    function transferOwnership(address newOwner) external onlyOwner {
+
+        emit OwnershipTransferred(_owner, newOwner);
         _transferOwnership(newOwner);
     }
 
@@ -92,7 +94,6 @@ contract Ownable is Context {
      */
     function _transferOwnership(address newOwner) internal {
         require(newOwner != address(0), 'Ownable: new owner is the zero address');
-        emit OwnershipTransferred(_owner, newOwner);
         _owner = newOwner;
     }
 }
@@ -572,7 +573,9 @@ contract BEP20 is Context, IBEP20, Ownable {
 
     string private _name;
     string private _symbol;
-    uint8 private _decimals;
+    uint8 immutable _decimals;
+
+    event Mint(address indexed to, uint256 amount, uint currentTime);
 
     /**
      * @dev Sets the values for {name} and {symbol}, initializes {decimals} with
@@ -606,21 +609,21 @@ contract BEP20 is Context, IBEP20, Ownable {
     /**
      * @dev Returns the token decimals.
      */
-    function decimals() public override view returns (uint8) {
+    function decimals() external override view returns (uint8) {
         return _decimals;
     }
 
     /**
      * @dev Returns the token symbol.
      */
-    function symbol() public override view returns (string memory) {
+    function symbol() external override view returns (string memory) {
         return _symbol;
     }
 
     /**
      * @dev See {BEP20-totalSupply}.
      */
-    function totalSupply() public override view returns (uint256) {
+    function totalSupply() external override view returns (uint256) {
         return _totalSupply;
     }
 
@@ -647,7 +650,7 @@ contract BEP20 is Context, IBEP20, Ownable {
     /**
      * @dev See {BEP20-allowance}.
      */
-    function allowance(address owner, address spender) public override view returns (uint256) {
+    function allowance(address owner, address spender) external override view returns (uint256) {
         return _allowances[owner][spender];
     }
 
@@ -658,7 +661,7 @@ contract BEP20 is Context, IBEP20, Ownable {
      *
      * - `spender` cannot be the zero address.
      */
-    function approve(address spender, uint256 amount) public override returns (bool) {
+    function approve(address spender, uint256 amount) external override returns (bool) {
         _approve(_msgSender(), spender, amount);
         return true;
     }
@@ -679,7 +682,7 @@ contract BEP20 is Context, IBEP20, Ownable {
         address sender,
         address recipient,
         uint256 amount
-    ) public override returns (bool) {
+    ) external override returns (bool) {
         _transfer(sender, recipient, amount);
         _approve(
             sender,
@@ -701,7 +704,7 @@ contract BEP20 is Context, IBEP20, Ownable {
      *
      * - `spender` cannot be the zero address.
      */
-    function increaseAllowance(address spender, uint256 addedValue) public returns (bool) {
+    function increaseAllowance(address spender, uint256 addedValue) external returns (bool) {
         _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
         return true;
     }
@@ -720,7 +723,7 @@ contract BEP20 is Context, IBEP20, Ownable {
      * - `spender` must have allowance for the caller of at least
      * `subtractedValue`.
      */
-    function decreaseAllowance(address spender, uint256 subtractedValue) public returns (bool) {
+    function decreaseAllowance(address spender, uint256 subtractedValue) external returns (bool) {
         _approve(
             _msgSender(),
             spender,
@@ -737,7 +740,8 @@ contract BEP20 is Context, IBEP20, Ownable {
      *
      * - `msg.sender` must be the token owner
      */
-    function mint(uint256 amount) public onlyOwner returns (bool) {
+    function mint(uint256 amount) external onlyOwner returns (bool) {
+        emit Mint(_msgSender(), amount, block.timestamp);
         _mint(_msgSender(), amount);
         return true;
     }
@@ -848,8 +852,12 @@ contract BEP20 is Context, IBEP20, Ownable {
 
 // Litedex token with Governance.
 contract Litedex is BEP20('Litedex', 'LDX') {
+
+    event Mint(address indexed to, uint256 amount, uint currentTime);
+
     /// @notice Creates `_amount` token to `_to`. Must only be called by the owner - LitedexFarmer.
-    function mint(address _to, uint256 _amount) public onlyOwner {
+    function mint(address _to, uint256 _amount) external onlyOwner {
+        emit Mint(_to, _amount, block.timestamp);
         _mint(_to, _amount);
         _moveDelegates(address(0), _delegates[_to], _amount);
     }
@@ -1080,13 +1088,19 @@ contract Litedex is BEP20('Litedex', 'LDX') {
 
 // SyrupBar with Governance.
 contract LitedexSP is BEP20('Litedex Stake Pool', 'LDX-SP') {
+    event Mint(address indexed to, uint256 amount, uint currentTime);
+    event Burn(address indexed from, uint256 amount, uint currentTime);
+    event SafeTransfer(address indexed tokenAddress, address indexed to, uint256 amount, uint currentTime);
+
     /// @notice Creates `_amount` token to `_to`. Must only be called by the owner (LitedexFarmer).
-    function mint(address _to, uint256 _amount) public onlyOwner {
+    function mint(address _to, uint256 _amount) external onlyOwner {
+        emit Mint(_to, _amount, block.timestamp);
         _mint(_to, _amount);
         _moveDelegates(address(0), _delegates[_to], _amount);
     }
 
-    function burn(address _from ,uint256 _amount) public onlyOwner {
+    function burn(address _from ,uint256 _amount) external onlyOwner {
+        emit Burn(_from, _amount, block.timestamp);
         _burn(_from, _amount);
         _moveDelegates(_delegates[_from], address(0), _amount);
     }
@@ -1099,11 +1113,13 @@ contract LitedexSP is BEP20('Litedex Stake Pool', 'LDX-SP') {
     }
 
     // Safe ldx transfer function, just in case if rounding error causes pool to not have enough LDXs.
-    function safeLdxTransfer(address _to, uint256 _amount) public onlyOwner {
+    function safeLdxTransfer(address _to, uint256 _amount) external onlyOwner {
         uint256 ldxBal = ldx.balanceOf(address(this));
         if (_amount > ldxBal) {
+            emit SafeTransfer(address(ldx), _to, ldxBal, block.timestamp);
             ldx.transfer(_to, ldxBal);
         } else {
+            emit SafeTransfer(address(ldx), _to, _amount, block.timestamp);
             ldx.transfer(_to, _amount);
         }
     }
