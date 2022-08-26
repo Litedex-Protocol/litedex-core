@@ -1213,10 +1213,10 @@ contract LitedexSP is BEP20('Litedex Stake Pool', 'LDX-SP') {
         uint256 ldxBalance = ldx.balanceOf(address(this));
         if (_amount > ldxBalance) {
             emit SafeTransfer(address(ldx), address(this), _to, ldxBalance);
-            ldx.transfer(_to, ldxBalance);
+            require(ldx.transfer(_to, ldxBalance), "Invalid Transfer");
         } else {
             emit SafeTransfer(address(ldx), address(this), _to, _amount);
-            ldx.transfer(_to, _amount);
+            require(ldx.transfer(_to, _amount), "Invalid Transfer");
         }
     }
 

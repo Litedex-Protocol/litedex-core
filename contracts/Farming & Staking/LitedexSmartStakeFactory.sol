@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity 0.6.12;
 
 /*
  * @dev Provides information about the current execution context, including the
@@ -94,8 +94,6 @@ abstract contract Ownable is Context {
 }
 
 // File: bsc-library/contracts/IBEP20.sol
-
-pragma solidity >=0.4.0;
 
 interface IBEP20 {
     /**
@@ -193,8 +191,6 @@ interface IBEP20 {
 }
 
 // File: @openzeppelin/contracts/math/SafeMath.sol
-
-pragma solidity >=0.6.0 <0.8.0;
 
 /**
  * @dev Wrappers over Solidity's arithmetic operations with added overflow
@@ -421,7 +417,7 @@ library SafeMath {
 
 // File: @openzeppelin/contracts/utils/ReentrancyGuard.sol
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity 0.6.0;
 
 /**
  * @dev Contract module that helps prevent reentrant calls to a function.
@@ -484,7 +480,7 @@ abstract contract ReentrancyGuard {
 
 // File: @openzeppelin/contracts/utils/Address.sol
 
-pragma solidity >=0.6.2 <0.8.0;
+pragma solidity 0.6.2;
 
 /**
  * @dev Collection of functions related to the address type
@@ -701,7 +697,7 @@ library Address {
 
 // File: bsc-library/contracts/SafeBEP20.sol
 
-pragma solidity ^0.6.0;
+pragma solidity 0.6.0;
 
 /**
  * @title SafeBEP20

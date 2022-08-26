@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity 0.6.0;
 
 /*
  * @dev Provides information about the current execution context, including the
@@ -25,7 +25,7 @@ abstract contract Context {
 
 // File: @openzeppelin/contracts/utils/ReentrancyGuard.sol
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity 0.6.0;
 
 /**
  * @dev Contract module that helps prevent reentrant calls to a function.
@@ -451,7 +451,7 @@ interface IBEP20 {
     event Approval(address indexed owner, address indexed spender, uint256 value);
 }
 
-pragma solidity >=0.6.2 <0.8.0;
+pragma solidity 0.6.2;
 
 /**
  * @dev Collection of functions related to the address type
@@ -666,7 +666,7 @@ library Address {
     }
 }
 
-pragma solidity >=0.6.0 <0.8.0;
+pragma solidity 0.6.0;
 
 /**
  * @title SafeBEP20
@@ -845,7 +845,7 @@ abstract contract Pausable is Context {
     }
 }
 
-pragma solidity ^0.6.12;
+pragma solidity 0.6.12;
 
 interface ILitedexFarmer {
     function deposit(uint256 _pid, uint256 _amount) external;
