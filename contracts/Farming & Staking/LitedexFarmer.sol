@@ -939,12 +939,12 @@ contract BEP20 is Context, IBEP20, Ownable {
 contract Litedex is BEP20('Litedex', 'LDX') {
     
     /* @notice Creates `_amount` token to `_to`. Must only be called by the owner or minter (LitedexFarmer). */
-    function mint(address _to, uint256 _amount) external {
+    function mint(address _to, uint256 _amount) external onlyOwner {
         _mint(_to, _amount);
         _moveDelegates(address(0), _delegates[_to], _amount);
     }
     /* @notice destroy `_amount` token from `_from`. Must only be called by the owner or minter (LitedexFarmer). */
-    function burn(uint256 _amount) external {
+    function burn(uint256 _amount) external onlyOwner {
         _burn(msg.sender, _amount);
         _moveDelegates(_delegates[msg.sender], address(0), _amount);
     }
@@ -1188,12 +1188,12 @@ contract LitedexSP is BEP20('Litedex Stake Pool', 'LDX-SP') {
 
     event SafeTransfer(address indexed tokenAddress, address indexed from, address indexed to, uint256 amount);
     /* @notice Creates `_amount` token to `_to`. Must only be called by the owner (LitedexFarmer). */
-    function mint(address _to, uint256 _amount) public {
+    function mint(address _to, uint256 _amount) public onlyOwner {
         _mint(_to, _amount);
         _moveDelegates(address(0), _delegates[_to], _amount);
     }
 
-    function burn(address _from ,uint256 _amount) public {
+    function burn(address _from ,uint256 _amount) public onlyOwner {
         _burn(_from, _amount);
         _moveDelegates(_delegates[_from], address(0),  _amount);
     }
